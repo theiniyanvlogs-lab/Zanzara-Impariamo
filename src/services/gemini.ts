@@ -1,105 +1,105 @@
-import { GoogleGenAI, Modality } from "@google/genai";
+import { GoogleGenAI, Modality, Type } from "@google/genai";
 
-/* =====================================================
-   ✅ LOAD GEMINI API KEY (VITE + NETLIFY SAFE)
-===================================================== */
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
-const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+export async function getMosquitoAnswer(question: string, history: any[], additionalContext: string) {
+  const model = "gemini-3-flash-preview";
+  const systemInstruction = `You are "Zanzara Impariamo", an expert on mosquitoes. 
+  You provide precise and correct information about mosquitoes in both Tamil and English.
+  Use the following additional knowledge if provided: ${additionalContext}.
+  You MUST return your response in a JSON format with two fields: "english" and "tamil".
+  The "english" field should contain the English explanation.
+  The "tamil" field should contain the Tamil translation.
+  Ensure both are detailed and accurate.`;
 
-if (!API_KEY) {
-  console.error("❌ Gemini API key missing.");
-}
-
-/* =====================================================
-   ✅ GEMINI CLIENT
-===================================================== */
-
-const ai = new GoogleGenAI({
-  apiKey: API_KEY,
-});
-
-/* =====================================================
-   ✅ MOSQUITO AI ANSWER
-===================================================== */
-
-export async function getMosquitoAnswer(
-  question: string,
-  history: any[] = [],
-  additionalContext: string = ""
-) {
-  try {
-    const model = "gemini-2.0-flash";
-
-    const systemInstruction = `
-You are "Zanzara Impariamo", a mosquito science expert.
-
-Rules:
-- Answer Tamil questions in Tamil.
-- Answer English questions in English.
-- Keep answers clear, scientific and educational.
-- Avoid unnecessary long explanations.
-
-Additional Knowledge:
-${additionalContext}
-`;
-
-    const response = await ai.models.generateContent({
-      model,
-      contents: [
-        ...history,
-        {
-          role: "user",
-          parts: [{ text: question }],
+  const response = await ai.models.generateContent({
+    model,
+    contents: [
+      ...history,
+      { role: "user", parts: [{ text: question }] }
+    ],
+    config: {
+      systemInstruction,
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          english: { type: Type.STRING },
+          tamil: { type: Type.STRING }
         },
-      ],
-      config: {
-        systemInstruction,
-      },
-    });
+        required: ["english", "tamil"]
+      }
+    },
+  });
 
-    return response.text || "No response generated.";
-  } catch (error) {
-    console.error("Gemini Error:", error);
-    return "⚠️ AI response failed. Please try again.";
+  try {
+    const data = JSON.parse(response.text || "{}");
+    return data;
+  } catch (e) {
+    console.error("Failed to parse JSON response", e);
+    return { english: response.text || "", tamil: "" };
   }
 }
 
-/* =====================================================
-   ✅ TEXT TO SPEECH (VOICE)
-===================================================== */
-
 export async function textToSpeech(text: string) {
+  const model = "gemini-2.5-flash-preview-tts";
   try {
-    const model = "gemini-2.0-flash-exp";
-
     const response = await ai.models.generateContent({
       model,
-      contents: [
-        {
-          role: "user",
-          parts: [{ text }],
-        },
-      ],
+      contents: [{ parts: [{ text: `Read this clearly: ${text}` }] }],
       config: {
         responseModalities: [Modality.AUDIO],
         speechConfig: {
           voiceConfig: {
-            prebuiltVoiceConfig: {
-              voiceName: "Kore",
-            },
+            prebuiltVoiceConfig: { voiceName: 'Kore' },
           },
         },
       },
     });
 
-    const audioBase64 =
-      response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-
-    if (!audioBase64) return null;
-
-    return `data:audio/wav;base64,${audioBase64}`;
+    const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+    if (base64Audio) {
+      // The model returns raw PCM data (L16, 24kHz). We need to wrap it in a WAV header.
+      return pcmToWav(base64Audio, 24000);
+    }
   } catch (error) {
-    console.error("TTS Error:", error);
-    return null;
+    console.error("TTS API Error:", error);
   }
+  return null;
+}
+
+function pcmToWav(pcmBase64: string, sampleRate: number): string {
+  const pcmData = Uint8Array.from(atob(pcmBase64), c => c.charCodeAt(0));
+  const wavHeader = new ArrayBuffer(44);
+  const view = new DataView(wavHeader);
+
+  // RIFF identifier
+  view.setUint32(0, 0x52494646, false); // "RIFF"
+  // file length
+  view.setUint32(4, 36 + pcmData.length, true);
+  // RIFF type
+  view.setUint32(8, 0x57415645, false); // "WAVE"
+  // format chunk identifier
+  view.setUint32(12, 0x666d7420, false); // "fmt "
+  // format chunk length
+  view.setUint32(16, 16, true);
+  // sample format (raw)
+  view.setUint16(20, 1, true); // PCM
+  // channel count
+  view.setUint16(22, 1, true); // Mono
+  // sample rate
+  view.setUint32(24, sampleRate, true);
+  // byte rate (sample rate * block align)
+  view.setUint32(28, sampleRate * 2, true);
+  // block align (channel count * bytes per sample)
+  view.setUint16(32, 2, true);
+  // bits per sample
+  view.setUint16(34, 16, true);
+  // data chunk identifier
+  view.setUint32(36, 0x64617461, false); // "data"
+  // data chunk length
+  view.setUint32(40, pcmData.length, true);
+
+  const blob = new Blob([wavHeader, pcmData], { type: 'audio/wav' });
+  return URL.createObjectURL(blob);
 }
