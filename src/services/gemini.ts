@@ -1,89 +1,106 @@
 import { GoogleGenAI, Modality } from "@google/genai";
 
-/**
- * ✅ IMPORTANT:
- * Netlify + Vite environment variables must use:
- * import.meta.env.VITE_*
- */
+/* =====================================================
+   ✅ SAFE ENV LOADING (VITE + NETLIFY)
+===================================================== */
+
+const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+
+// Safety check (prevents blank screen)
+if (!API_KEY) {
+  console.error("❌ Gemini API key missing!");
+}
+
+/* =====================================================
+   ✅ GEMINI CLIENT
+===================================================== */
+
 const ai = new GoogleGenAI({
-  apiKey: import.meta.env.VITE_GEMINI_API_KEY,
+  apiKey: API_KEY,
 });
 
 /* =====================================================
-   MOSQUITO QUESTION ANSWER
+   ✅ MOSQUITO QUESTION ANSWER
 ===================================================== */
 
 export async function getMosquitoAnswer(
   question: string,
-  history: any[],
-  additionalContext: string
+  history: any[] = [],
+  additionalContext: string = ""
 ) {
-  const model = "gemini-3-flash-preview";
+  try {
+    const model = "gemini-1.5-flash";
 
-  const systemInstruction = `
+    const systemInstruction = `
 You are "Zanzara Impariamo", an expert on mosquitoes.
-You provide scientifically accurate information about mosquitoes.
 
 Rules:
-- Answer in Tamil if user asks in Tamil.
-- Answer in English if user asks in English.
-- Keep answers clear and educational.
-- Use additional knowledge if provided.
+- Reply in Tamil if question is Tamil.
+- Reply in English if question is English.
+- Keep answers short, scientific, and clear.
+- Be educational and accurate.
 
 Additional Knowledge:
 ${additionalContext}
 `;
 
-  const response = await ai.models.generateContent({
-    model,
-    contents: [
-      ...history,
-      {
-        role: "user",
-        parts: [{ text: question }],
+    const response = await ai.models.generateContent({
+      model,
+      contents: [
+        ...history,
+        {
+          role: "user",
+          parts: [{ text: question }],
+        },
+      ],
+      config: {
+        systemInstruction,
       },
-    ],
-    config: {
-      systemInstruction,
-    },
-  });
+    });
 
-  return response.text;
+    return response.text || "No response generated.";
+  } catch (error) {
+    console.error("Gemini Error:", error);
+    return "⚠️ AI response failed. Please try again.";
+  }
 }
 
 /* =====================================================
-   TEXT TO SPEECH
+   ✅ TEXT TO SPEECH
 ===================================================== */
 
 export async function textToSpeech(text: string) {
-  const model = "gemini-2.5-flash-preview-tts";
+  try {
+    const model = "gemini-1.5-flash";
 
-  const response = await ai.models.generateContent({
-    model,
-    contents: [
-      {
-        role: "user",
-        parts: [{ text }],
-      },
-    ],
-    config: {
-      responseModalities: [Modality.AUDIO],
-      speechConfig: {
-        voiceConfig: {
-          prebuiltVoiceConfig: {
-            voiceName: "Kore",
+    const response = await ai.models.generateContent({
+      model,
+      contents: [
+        {
+          role: "user",
+          parts: [{ text }],
+        },
+      ],
+      config: {
+        responseModalities: [Modality.AUDIO],
+        speechConfig: {
+          voiceConfig: {
+            prebuiltVoiceConfig: {
+              voiceName: "Kore",
+            },
           },
         },
       },
-    },
-  });
+    });
 
-  const base64Audio =
-    response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+    const audio =
+      response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
 
-  if (base64Audio) {
-    return `data:audio/wav;base64,${base64Audio}`;
+    if (!audio) return null;
+
+    return `data:audio/wav;base64,${audio}`;
+  } catch (error) {
+    console.error("TTS Error:", error);
+    return null;
   }
-
-  return null;
 }
