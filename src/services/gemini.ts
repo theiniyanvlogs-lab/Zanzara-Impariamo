@@ -1,14 +1,13 @@
 import { GoogleGenAI, Modality } from "@google/genai";
 
 /* =====================================================
-   ✅ SAFE ENV LOADING (VITE + NETLIFY)
+   ✅ LOAD GEMINI API KEY (VITE + NETLIFY SAFE)
 ===================================================== */
 
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 
-// Safety check (prevents blank screen)
 if (!API_KEY) {
-  console.error("❌ Gemini API key missing!");
+  console.error("❌ Gemini API key missing.");
 }
 
 /* =====================================================
@@ -20,7 +19,7 @@ const ai = new GoogleGenAI({
 });
 
 /* =====================================================
-   ✅ MOSQUITO QUESTION ANSWER
+   ✅ MOSQUITO AI ANSWER
 ===================================================== */
 
 export async function getMosquitoAnswer(
@@ -29,16 +28,16 @@ export async function getMosquitoAnswer(
   additionalContext: string = ""
 ) {
   try {
-    const model = "gemini-1.5-flash";
+    const model = "gemini-2.0-flash";
 
     const systemInstruction = `
-You are "Zanzara Impariamo", an expert on mosquitoes.
+You are "Zanzara Impariamo", a mosquito science expert.
 
 Rules:
-- Reply in Tamil if question is Tamil.
-- Reply in English if question is English.
-- Keep answers short, scientific, and clear.
-- Be educational and accurate.
+- Answer Tamil questions in Tamil.
+- Answer English questions in English.
+- Keep answers clear, scientific and educational.
+- Avoid unnecessary long explanations.
 
 Additional Knowledge:
 ${additionalContext}
@@ -66,12 +65,12 @@ ${additionalContext}
 }
 
 /* =====================================================
-   ✅ TEXT TO SPEECH
+   ✅ TEXT TO SPEECH (VOICE)
 ===================================================== */
 
 export async function textToSpeech(text: string) {
   try {
-    const model = "gemini-1.5-flash";
+    const model = "gemini-2.0-flash-exp";
 
     const response = await ai.models.generateContent({
       model,
@@ -93,12 +92,12 @@ export async function textToSpeech(text: string) {
       },
     });
 
-    const audio =
+    const audioBase64 =
       response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
 
-    if (!audio) return null;
+    if (!audioBase64) return null;
 
-    return `data:audio/wav;base64,${audio}`;
+    return `data:audio/wav;base64,${audioBase64}`;
   } catch (error) {
     console.error("TTS Error:", error);
     return null;
