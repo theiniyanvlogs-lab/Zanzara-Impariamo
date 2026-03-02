@@ -1,0 +1,5 @@
+{
+  "name": "Zanzara Impariamo",
+  "description": "A mosquito education app with voice and text interaction.",
+  "requestFramePermissions": ["microphone"]
+}
